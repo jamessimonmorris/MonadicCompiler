@@ -89,10 +89,14 @@ Compile Program
 
 > compProg                :: Prog -> ST Code
 > compProg(Seqn[])        =  return []
-> compProg(Seqn(x:xs))    =  do cp <- compProg x
->                                cpSeq <- compProg (Seqn xs)
+> compProg(Seqn(x:xs))    =  do cp      <- compProg x
+>                                cpSeq  <- compProg (Seqn xs)
 >                                return (cp ++ cpSeq)
 > compProg(Assign n expr) =  return (compExp expr ++ [POP n])
+>
+> compProg(If expr p1 p2) =
+>
+> compProg(While expr p1) =
 
 Compile Expressions
 
