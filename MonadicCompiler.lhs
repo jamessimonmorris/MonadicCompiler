@@ -4,6 +4,8 @@ William Michael Hickling | James Simon Morris
 psywmh@nottingham.ac.uk  | psyjsmor@nottingham.ac.uk
 -----------------------------------------------------
 
+> import Data.List
+
 Program is either an assignment, conditional, while loop or a sequence of
 programs.
 
@@ -27,8 +29,8 @@ Function to calculate factorial of non-negative integer
 > fac n = Seqn [Assign 'A' (Val 1),
 >               Assign 'B' (Val n),
 >               While (Var 'B') (Seqn
->                  [Assign 'A' (App Mul (Var 'A')(Var 'B')),
->                   Assign 'B' (App Sub (Var 'B')(Val (1))])]
+>                 [Assign 'A' (App Mul (Var 'A')(Var 'B')),
+>                  Assign 'B' (App Sub (Var 'B')(Val (1))])]
 
 > type Stack = [Int]
 >
@@ -62,6 +64,7 @@ Need to use data mechanism to make ST into an instance of a class.
 Removes the dummy constructor
 
 > apply            :: ST a -> State -> (a, State)
+> apply (S f) x    =  f x
 
 return             :: a -> ST a
 (>>=)              :: ST a -> (a -> ST b) -> ST b
@@ -80,10 +83,16 @@ Compiler Code
 Compiles program and expressions, assigning fresh labels when needed.
 
 > comp             :: Prog -> Code
+> comp p           =  run (compProg p) 0
 
 Compile Program
 
-> compProg         :: Prog -> ST Code
+> compProg                :: Prog -> ST Code
+> compProg(Seqn[])        =  return []
+> compProg(Seqn(x:xs))    =  do cp <- compProg x
+>                                cpSeq <- compProg (Seqn xs)
+>                                return (cp ++ cpSeq)
+> compProg(Assign n expr) =  return (compExp expr ++ [POP n])
 
 Compile Expressions
 
