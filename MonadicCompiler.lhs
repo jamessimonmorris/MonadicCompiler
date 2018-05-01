@@ -94,9 +94,19 @@ Compile Program
 >                                return (cp ++ cpSeq)
 > compProg(Assign n expr) =  return (compExp expr ++ [POP n])
 >
-> compProg(If expr p1 p2) =
+> compProg(If expr p1 p2) =  do l       <- fresh
+>                               l'      <- fresh
+>                               TrueSeq <- compProg p1
+>                               FalSeq  <- compProg p2
+>                               return(compExp expr ++ [JUMPZ l] ++ TrueSeq ++
+>                                     [JUMP l', LABEL l] ++ FalSeq ++
+>                                     [LABEL l'])
 >
-> compProg(While expr p1) =
+> compProg(While expr p1) =  do l       <- fresh
+>                               l'      <- fresh
+>                               cpSeq   <- compProg s
+>                               return([LABEL l] ++ compExp expr ++ [JUMPZ l']
+>                                     ++ cpSeq ++ [JUMP 0, LABEL l'] )
 
 Compile Expressions
 
