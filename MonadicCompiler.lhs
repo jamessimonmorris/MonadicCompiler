@@ -152,7 +152,11 @@ Retrieves a variable from memory
 
 Runs arithmetic operations
 
-> doOp             :: Op -> [Int] -> Int
+> doOp               :: Op -> [Int] -> Int
+> doOp Add( x:y:xs ) =  ( x + y )
+> doOp Sub( x:y:xs ) =  ( x - y )
+> doOp Mul( x:y:xs ) =  ( x * y )
+> doOp Div( x:y:xs)  =  ( x `div` y )
 
 Get the program counter at a given label
 
