@@ -111,10 +111,22 @@ Compile Program
 Compile Expressions
 
 > compExp          :: Expr -> Code
+>
+> compExp( Val n ) =  [PUSH n]
+>
+> compExp( Var v)  =  [PUSHV v]
+>
+> compExp( App op( Val x )( Val y )) = [PUSH( optOP op x y )]
+>
+> compExp( App op xp1 xp2 ) = compExp xp1 ++ compExp xp2 ++ [DO op]
 
 Optimise expressions by removing integer operations
 
 > optOp            :: Op -> Int -> Int -> Int
+> optOp Add x y    =  ( x + y )
+> optOp Sub x y    =  ( x - y )
+> optOp Mul x y    =  ( x * y )
+> optOp Div x y    =  ( x `div` y )
 
 Code Execution
 --------------
