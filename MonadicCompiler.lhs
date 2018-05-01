@@ -56,6 +56,9 @@ stack and jumps if the value is zero, or is simply a label.
 
 State Transformer Monad
 -----------------------
+> instance Monad ST where
+>   return x       = S( \s -> ( x, s ))
+>   st >>= f       = S( \s -> let( x, s' ) = apply st s in apply( f x) s' )
 
 Need to use data mechanism to make ST into an instance of a class.
 
