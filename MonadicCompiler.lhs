@@ -2,165 +2,189 @@ G52AFP Coursework 2 - Monadic Compiler
 
 William Michael Hickling | James Simon Morris
 psywmh@nottingham.ac.uk  | psyjsmor@nottingham.ac.uk
------------------------------------------------------
+--------------------------------------------------------------------------------
 
 > import Data.List
 
-Program is either an assignment, conditional, while loop or a sequence of
-programs.
+Imperative language:
 
 > data Prog = Assign Name Expr
 >           | If Expr Prog Prog
 >           | While Expr Prog
 >           | Seqn [Prog]
-
-An expression is either an integer value, a variable name, or the application
-of an operator or two argument expressions
-
+>             deriving Show
+>
 > data Expr = Val Int | Var Name | App Op Expr Expr
+>             deriving Show
+>
 > type Name = Char
-> data Op = Add | Sub | Mul | Div
+>
+> data Op   = Add | Sub | Mul | Div
+>             deriving Show
 
-Logical value False is represented as zero, true is any other integer.
-
-Function to calculate factorial of non-negative integer
+Factorial example:
 
 > fac :: Int -> Prog
 > fac n = Seqn [Assign 'A' (Val 1),
 >               Assign 'B' (Val n),
 >               While (Var 'B') (Seqn
->                 [Assign 'A' (App Mul (Var 'A')(Var 'B')),
->                  Assign 'B' (App Sub (Var 'B')(Val (1))])]
+>                  [Assign 'A' (App Mul (Var 'A') (Var 'B')),
+>                   Assign 'B' (App Sub (Var 'B') (Val (1)))])]
+
+Virtual machine:
 
 > type Stack = [Int]
 >
-> type Mem = [(Name, Int)]
-
-There are a list of instructions for the compiler. They either push an integer
-onto the stack, push the value of a variable, pops the top of the stack into
-a variable, performs an operation on the stack, jumps to a label, pops the
-stack and jumps if the value is zero, or is simply a label.
-
-> type Code = [Inst]
+> type Mem   = [(Name,Int)]
 >
-> data Inst = PUSH Int
->           | PUSHV Name
->           | POP Name
->           | DO Op
->           | JUMP Label
->           | JUMPZ Label
->           | LABEL Label
->           deriving Show
->
+> type Code  = [Inst]
+> 
+> data Inst  = PUSH Int
+>            | PUSHV Name
+>            | POP Name
+>            | DO Op
+>            | JUMP Label
+>            | JUMPZ Label
+>            | LABEL Label
+>              deriving Show
+> 
 > type Label = Int
 
-State Transformer Monad
------------------------
+State Monad:
+
+> type State = Label
+>
+> newtype ST a = S (State -> (a, State))
+>
+> app :: ST a -> State -> (a,State)
+> app (S st) x 	=  st x
+>
+> instance Functor ST where
+>    -- fmap :: (a -> b) -> ST a -> ST b
+>    fmap g st = S (\s -> let (x,s') = app st s in (g x, s'))
+>
+> instance Applicative ST where
+>    -- pure :: a -> ST a
+>    pure x = S (\s -> (x,s))
+>
+>    -- (<*>) :: ST (a -> b) -> ST a -> ST b
+>    stf <*> stx = S (\s ->
+>       let (f,s')  = app stf s
+>           (x,s'') = app stx s' in (f x, s''))
+>
 > instance Monad ST where
->   return x       = S( \s -> ( x, s ))
->   st >>= f       = S( \s -> let( x, s' ) = apply st s in apply( f x) s' )
-
-Need to use data mechanism to make ST into an instance of a class.
-
-> data ST a = S(State -> (a,State))
-
-Removes the dummy constructor
-
-> apply            :: ST a -> State -> (a, State)
-> apply (S f) x    =  f x
-
-return             :: a -> ST a
-(>>=)              :: ST a -> (a -> ST b) -> ST b
-
-> type State       = Label
+>    -- return :: a -> ST a
+>    return x = S (\s -> (x,s))
 >
-> fresh            :: ST Int
->
-> app              :: (State -> State) -> ST State
->
-> run              :: ST a -> State -> a
+>    -- (>>=) :: ST a -> (a -> ST b) -> ST b
+>    st >>= f = S (\s -> let (x,s') = app st s in app (f x) s')
 
-Compiler Code
--------------
+--------------------------------------------------------------------------------
 
-Compiles program and expressions, assigning fresh labels when needed.
+Compiles program and expressions, assigining fresh labels when needed
 
-> comp             :: Prog -> Code
-> comp p           =  run (compProg p) 0
+> comp                             :: Prog -> Code
+> comp p                           =  run (compProg p) 0
+>
+> fresh                            :: ST Int
+> fresh                            =  apply (+1)
+>
+> apply                              :: (State -> State) -> ST State
+> apply f                            =  S (\n -> (n, f n))
+>
+> run                              :: ST a -> State -> a
+> run p s                          =  fst (app p s) 
 
-Compile Program
+Compile program
 
-> compProg                :: Prog -> ST Code
-> compProg(Seqn[])        =  return []
-> compProg(Seqn(x:xs))    =  do cp      <- compProg x
->                                cpSeq  <- compProg (Seqn xs)
->                                return (cp ++ cpSeq)
-> compProg(Assign n expr) =  return (compExp expr ++ [POP n])
+> compProg                     :: Prog ->  ST Code
 >
-> compProg(If expr p1 p2) =  do l       <- fresh
->                               l'      <- fresh
->                               TrueSeq <- compProg p1
->                               FalSeq  <- compProg p2
->                               return(compExp expr ++ [JUMPZ l] ++ TrueSeq ++
->                                     [JUMP l', LABEL l] ++ FalSeq ++
->                                     [LABEL l'])
+> compProg (Seqn [])           =  return []
 >
-> compProg(While expr p1) =  do l       <- fresh
->                               l'      <- fresh
->                               cpSeq   <- compProg s
->                               return([LABEL l] ++ compExp expr ++ [JUMPZ l']
->                                     ++ cpSeq ++ [JUMP 0, LABEL l'] )
+> compProg (Seqn (x:xs))       =  do cx   <- compProg x
+>                                    cSeq <- compProg (Seqn xs)
+>                                    return (cx ++ cSeq) 
+>
+> compProg (Assign n xpr)          =  return (compExpr xpr ++ [POP n])
+>
+> compProg (While xpr s)           =  do l    <- fresh
+>                                        l'   <- fresh
+>                                        cSeq <- compProg s
+>                                        return ([LABEL l] ++ compExpr xpr ++ [JUMPZ l'] ++ cSeq ++ [JUMP 0, LABEL l'])
+>
+> compProg (If xpr p1 p2)          =  do l     <- fresh
+>                                        l'    <- fresh
+>                                        cTSeq <- compProg p1 -- true sequence compiled
+>                                        cFSeq <- compProg p2 -- false sequence compiled
+>                                        return (compExpr xpr ++ [JUMPZ l] ++ cTSeq ++ [JUMP l', LABEL l] ++ cFSeq ++ [LABEL l'])
 
-Compile Expressions
+Compile separate expressions
 
-> compExp          :: Expr -> Code
+> compExpr                          :: Expr -> Code
 >
-> compExp( Val n ) =  [PUSH n]
+> compExpr (Val n)                  =  [PUSH n]
 >
-> compExp( Var v)  =  [PUSHV v]
+> compExpr (Var v)                  =  [PUSHV v]
 >
-> compExp( App op( Val x )( Val y )) = [PUSH( optOP op x y )]
+> compExpr (App op (Val x) (Val y)) =  [PUSH (optExpr op x y)]
 >
-> compExp( App op xp1 xp2 ) = compExp xp1 ++ compExp xp2 ++ [DO op]
+> compExpr (App op xp1 xp2)         =  compExpr xp1 ++ compExpr xp2 ++ [DO op]
 
 Optimise expressions by removing integer operations
 
-> optOp            :: Op -> Int -> Int -> Int
-> optOp Add x y    =  ( x + y )
-> optOp Sub x y    =  ( x - y )
-> optOp Mul x y    =  ( x * y )
-> optOp Div x y    =  ( x `div` y )
+> optExpr                            :: Op -> Int -> Int -> Int
+> optExpr Add x y                    =  (x + y)
+> optExpr Sub x y                    =  (y - x)
+> optExpr Mul x y                    =  (x * y)
+> optExpr Div x y                    =  (y `div` x)
 
-Code Execution
---------------
+Code execution
+---------------
+Program Counter
 
-Program counter
-
-> type PC = Int
->
-> exec             :: Code -> Mem
-
-Runs the program execution, keeping track of memory, the stack and program
-counter
-
-> ex               :: Code -> Mem -> Stack -> PC -> Mem
-
-Removes all old duplicates from memory
-
-> clear            :: Mem -> Mem
-
-Retrieves a variable from memory
-
-> getVar           :: Name -> Mem -> Int
-
-Runs arithmetic operations
-
-> doOp               :: Op -> [Int] -> Int
-> doOp Add( x:y:xs ) =  ( x + y )
-> doOp Sub( x:y:xs ) =  ( x - y )
-> doOp Mul( x:y:xs ) =  ( x * y )
-> doOp Div( x:y:xs)  =  ( x `div` y )
+> type PC = Int    
+>     
+> exec                             :: Code -> Mem
+> exec c                           =  reverse (ex c [] [] 0)
 
 Get the program counter at a given label
 
-> getPC            :: Code -> Label -> Int -> PC
+> getPC                            :: Code -> Label -> Int -> PC
+> getPC code l n                   =  case (code!!n) of
+>                                       LABEL l' -> if l == l' then n else getPC code l (n+1)
+>                                       _        -> getPC code l (n+1) 
+
+Runs the program execution, keeping track of memory, the stack and program counter
+
+> ex                               :: Code -> Mem -> Stack -> PC -> Mem
+>
+> ex code mem stack pc             =  if pc < length code then
+>                                        case (code!!pc) of
+>                                          PUSH n     -> ex code mem (n:stack) (pc+1)
+>                                          PUSHV v    -> ex code mem ((getVal v mem) : stack) (pc+1)
+>                                          POP v      -> ex code ((v, head stack):mem) (tail stack) (pc+1)
+>                                          DO op      -> ex code mem ((doOp op (take 2 stack)) : stack) (pc+1)
+>                                          LABEL l    -> ex code mem stack (pc+1)
+>                                          JUMP l     -> ex code mem stack (getPC code l 0)
+>                                          JUMPZ l    -> ex code mem stack zPC
+>                                                        where
+>                                                           zPC = if (head stack) == 0 then (getPC code l 0) else (pc+1) 
+>                                     else clear mem
+
+Retrieves a value from memory
+
+> getVal                           :: Name -> Mem -> Int
+> getVal n ((v, i) : xs)           =  if v == n then i else getVal n xs
+
+Removes all old duplicates from memory
+
+> clear                            :: Mem -> Mem
+> clear mem                        =  nubBy (\(v, i) (v', i') -> v == v') mem
+
+Runs arithmetic operations
+
+> doOp                             :: Op -> [Int] -> Int
+> doOp Add (x:y:xs)                =  y + x
+> doOp Sub (x:y:xs)                =  y - x
+> doOp Mul (x:y:xs)                =  y * x
+> doOp Div (x:y:xs)                =  y `div` x
